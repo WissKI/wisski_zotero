@@ -1,0 +1,25 @@
+<?php
+
+/**
+ * Implementation of hook_install().
+ */
+function wisski_zotero_install() {
+  $id = variable_get('wisski_zotero_ap', -1);
+
+
+  $ap = new stdClass(); 
+  $ap->name = 'Zotero';
+  $ap->type = 'store';
+  $ap->module = 'wisski_ap_store';
+  $ap->settings = NULL;
+
+  if($id != -1) {
+    $ap->aid = $id;
+  }
+
+  wisski_accesspoint_save($ap); 
+
+  $id = $ap->aid;
+  variable_set('wisski_zotero_ap', $id);
+
+}

@@ -1,0 +1,7 @@
+; $Id: 
+name = WissKI Zotero Access Endpoint
+description = Communication Plattform between Zotero and WissKI
+package = WissKI
+version = 1.0
+core = 6.x
+dependencies[] = wisski_store
