@@ -13,7 +13,7 @@ function wisski_zotero_endpoint_serve() {
   $id = variable_get('wisski_zotero_ap', -1);
   
   // When was the last call? if it was more than 10 minutes, delete the TS
-  $version = variable_get('wisski_zotero_version', time());
+  $version = variable_get('wisski_zotero_version', 0);
   
   // get the config for the Zotero API           
   $userID = variable_get('wisski_zotero_userid', '');
@@ -30,13 +30,15 @@ function wisski_zotero_endpoint_serve() {
   // drop the old data
   $minutes = variable_get('wisski_zotero_minutes', 10);
   if($version < (time() - ($minutes*60))) {
-    $store->drop();
+    $store->query('DELETE FROM <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>');
+    $query = 'LOAD <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>';
+    $store->query($query);
     variable_set('wisski_zotero_version', time());
   }
    
   // load the current data
-  $query = 'LOAD <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>';
-  $store->query($query);
+//  $query = 'LOAD <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>';
+//  $store->query($query);
  
   // get the config of the store
   $config = $store->a;
