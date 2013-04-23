@@ -1,27 +1,10 @@
 <?php
 // $ID$
 
-function wisski_zotero_getObj() {
-  global $db_url;
-  global $base_url;
-
-  $db_conn = parse_url($db_url);
-  $storecfg = array(
-    'db_name' => urldecode(variable_get('wisski_database', substr($db_conn['path'], 1))),
-    'db_host' => urldecode($db_conn['host']),
-    'db_user' => urldecode($db_conn['user']),
-    'db_pwd' => urldecode($db_conn['pass']),
-    'store_name' => variable_get('wisski_table', 'wissKI'),
-  );
-
-  $wisski = new wisski_Store($storecfg, $base_url);
-  return $wisski;
-  
-}
-
-/**Initialize and ask the triple store to handle the endpoint request
+/** 
+* Initialize and ask the triple store to handle the endpoint request
 *
-* @author Martin Scholz
+* @author Mark Fichtner
 *
 */
 function wisski_zotero_endpoint_serve() {
@@ -29,53 +12,36 @@ function wisski_zotero_endpoint_serve() {
   // get the ap id
   $id = variable_get('wisski_zotero_ap', -1);
   
-  // fetch the WissKI triple store config
-//  drupal_load('module', 'wisski_store');
-//  $config = wisski_store_getObj()->config;
-
-//  $config['store_name'] = "Zotero-store";
-      
-  // define which SPARQL verbs may be used by the user
-//  $config['endpoint_features'] = _wisski_endpoint_access_verbs();
-           
-  $user = "groups";
-  $userID = 161480;
-  $apiKey = 'bgDMN6S6TZ9EhumM6FFMy79T';
- 
-  /*
-  $curl = curl_init();
-  curl_setopt($curl, CURLOPT_URL, 'https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero');
-  //https://api.zotero.org/users/475425/collections/9KH9TNSJ/items?format=rdf_zotero
-  curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
- 
-  $resp = curl_exec($curl);
-  curl_close($curl);
-  */
- 
-  //$wisski = new wisski_Store($config, $base_url);
-
-  //$store = $wisski->wisski_ARCAdapter_getStore();
- 
-  $store = wisski_accesspoint_get($id,'endpoint');
- 
-//  return serialize($store);
- 
-  $query = 'LOAD <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>';
+  // When was the last call? if it was more than 10 minutes, delete the TS
+  $version = variable_get('wisski_zotero_version', time());
   
-//  return serialize($query);
- 
+  // get the config for the Zotero API           
+  $userID = variable_get('wisski_zotero_userid', '');
+  $apiKey = variable_get('wisski_zotero_apikey', '');
+  $user = variable_get('wisski_zotero_user', 0);
+  if($user == 0)
+    $user = "users";
+  else
+    $user = "groups";
+  
+  // get the store from the access point module
+  $store = wisski_accesspoint_get($id,'endpoint');
+
+  // drop the old data
+  $minutes = variable_get('wisski_zotero_minutes', 10);
+  if($version < (time() - ($minutes*60))) {
+    $store->drop();
+    variable_set('wisski_zotero_version', time());
+  }
+   
+  // load the current data
+  $query = 'LOAD <https://api.zotero.org/' . $user . '/' . $userID . '/items?key=' . $apiKey . '&content=rdf_zotero>';
   $store->query($query);
  
-      
-  // define which SPARQL verbs may be used by the user
-//  $config['endpoint_features'] = _wisski_endpoint_access_verbs();
-
-//  return serialize($store);
-
+  // get the config of the store
   $config = $store->a;
 
-//  return serialize($config);
-
+  // get the endpoint features for a usual user
   $config['endpoint_features'] = _wisski_endpoint_access_verbs();
           
   /* instantiation */
@@ -90,6 +56,58 @@ function wisski_zotero_endpoint_serve() {
  
 }
 
+/**
+ * Admin formular for the zotero settings
+ *
+ * @author Mark Fichtner
+ *
+ */
+function wisski_zotero_admin_settings() {
+  $form = array();
+  
+  $form['wisski_zotero_user'] = array(
+    '#type' => 'select',
+    '#title' => t('Access type'),
+    '#description' => t('Is the Zotero-library a user-library or a group-library?'),
+    '#default_value' => variable_get('wisski_zotero_user', 0),
+    '#options' => array(t('User'),t('Group')),
+  );
+
+  
+  $form['wisski_zotero_userid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('UserID'),
+    '#description' => t('What is the ID of the Zotero-user or group?'),
+    '#default_value' => variable_get('wisski_zotero_userid', ''),
+  );
+  
+  $form['wisski_zotero_apikey'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Zotero API-Key'),
+    '#description' => t('What is the APIkey for the access of the Zotero library?'),
+    '#default_value' => variable_get('wisski_zotero_apikey', ''),
+  );
+  
+  $form['wisski_zotero_minutes'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Data reset'),
+    '#description' => t('After how many minutes should the data be refetched from the Zotero-Server?'),
+    '#default_value' => variable_get('wisski_zotero_minutes', 10),
+  );
+
+  return system_settings_form($form);
+
+  
+  return $form;
+}
+
+
+/**
+ * Call to hook_menu
+ *
+ * @author Mark Fichtner
+ *
+ */
 function wisski_zotero_menu() {
 
   $items['wisski/zoteroendpoint'] = array(
@@ -97,20 +115,19 @@ function wisski_zotero_menu() {
     'title' => 'SparQL Endpoint',
     'page callback' => 'wisski_zotero_endpoint_serve',
     'access callback' => TRUE,
-//    'access callback' => '_wisski_endpoint_check_access',
+    'access callback' => '_wisski_endpoint_check_access',
 //    'file' => 'wisski_endpoint.inc',
   );
   $items['admin/settings/wisski/zoteroendpoint'] = array(
     'title' => 'Zotero Endpoint',
     'type' => MENU_LOCAL_TASK,
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('wisski_endpoint_admin_settings'),
-//    'access arguments' => array('wisski administrate endpoint'),
+    'page arguments' => array('wisski_zotero_admin_settings'),
+    'access arguments' => array('wisski administrate endpoint'),
 //    'file' => 'wisski_endpoint.inc',
   );
                                                     
-  return $items;
-                                                     
+  return $items;                                                     
 }
                                                       
                             

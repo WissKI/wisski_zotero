@@ -5,3 +5,5 @@ package = WissKI
 version = 1.0
 core = 6.x
 dependencies[] = wisski_store
+dependencies[] = wisski_endpoint
+dependencies[] = wisski_ap_store
